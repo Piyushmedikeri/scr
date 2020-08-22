@@ -15,7 +15,7 @@ from envs.crowd_nav.utils.transformations import build_occupancy_map_torch
 
 class EmpowermentNetwork(nn.Module):
     def __init__(self, state_nb):
-        super().__init__()
+        super(EmpowermentNetwork,self).__init__()
         self.source = Source(state_nb, 2)
         self.planning = Planning(state_nb, 2)
         self.transition = Transition(state_nb, 2)
@@ -43,7 +43,8 @@ class EmpowermentNetwork(nn.Module):
 class SCR(SARL):
     max_grad_norm = .5
     def __init__(self):
-        super().__init__()
+        super(SCR,self).__init__()
+
         self.name = 'SCR'
 
     def configure(self, config):

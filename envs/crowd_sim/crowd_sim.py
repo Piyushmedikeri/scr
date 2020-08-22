@@ -3,8 +3,33 @@ import numpy as np
 from numpy.linalg import norm
 from envs.crowd_sim.utils.utils import point_to_segment_dist
 from envs.crowd_sim.utils.info import *
+import matplotlib.lines as mlines
+import matplotlib.pyplot as plt
+from matplotlib import patches
+import configparser
 
+class CrowdSimConfig():
+    def __init__(self, file):
+        config = configparser.RawConfigParser()
+        config.read(file)
 
+        self.time_limit = config.getint('env', 'time_limit')
+        self.time_step = config.getfloat('env', 'time_step')
+        self.randomize_attributes = config.getboolean('env', 'randomize_attributes')
+        self.case_capacity = {'train': np.iinfo(np.uint32).max - 2000, 'val': 1000, 'test': 1000}
+        self.case_size = {'train': np.iinfo(np.uint32).max - 2000, 'val': config.getint('env', 'val_size'),
+                          'test': config.getint('env', 'test_size')}
+
+        self.success_reward = config.getfloat('reward', 'success_reward')
+        self.collision_penalty = config.getfloat('reward', 'collision_penalty')
+        self.discomfort_dist = config.getfloat('reward', 'discomfort_dist')
+        self.discomfort_penalty_factor = config.getfloat('reward', 'discomfort_penalty_factor')
+
+        self.square_width = config.getfloat('sim', 'square_width')
+        self.circle_radius = config.getfloat('sim', 'circle_radius')
+        self.human_num = config.getint('sim', 'human_num')
+        self.train_val_sim = config.get('sim', 'train_val_sim')
+        self.test_sim = config.get('sim', 'test_sim')
 class CrowdSim(gym.Env):
 	def __init__(self):
 		print('Env initialization')
@@ -29,7 +54,7 @@ class CrowdSim(gym.Env):
 		# simulation configuration
 		self.case_capacity = {'train': np.iinfo(np.uint32).max - 2000, 'val': 1000, 'test': 1000}
 		self.case_size = {'train': np.iinfo(np.uint32).max - 2000, 'val': 100, 'test': 500}
-		self.randomize_attributes = True
+		self.randomize_attributes = False
 		self.train_val_sim = 'circle_crossing'
 		self.test_sim = 'circle_crossing'
 		self.square_width = 10
@@ -51,11 +76,8 @@ class CrowdSim(gym.Env):
 
 		#print('Square width: {}, circle width: {}'.format(self.square_width, self.circle_radius))
 
-		#self.renderer = MatplotRenderer()
+		self.renderer = MatplotRenderer()
 
-
-	def step(self):
-		print('step initialization')
 
 	def generate_static_human(self, i):
 		if i == self.human_num - 1:
@@ -121,6 +143,7 @@ class CrowdSim(gym.Env):
 		    self.humans[i].sample_random_attributes()
 		while True:
 		    angle = np.random.random() * np.pi * 2
+		    #angle = np.pi * 2
 		    # add some noise to simulate all the possible cases robot could meet with human
 		    px_noise = (np.random.random() - 0.5) * self.humans[i].v_pref
 		    py_noise = (np.random.random() - 0.5) * self.humans[i].v_pref
@@ -165,6 +188,79 @@ class CrowdSim(gym.Env):
 		    if not collide:
 		        break
 		self.humans[i].set(px, py, gx, gy, 0, 0, 0)
+
+	# def get_human_times(self):
+	# 	"""
+	# 	Run the whole simulation to the end and compute the average time for human to reach goal.
+	# 	Once an agent reaches the goal, it stops moving and becomes an obstacle
+	# 	(doesn't need to take half responsibility to avoid collision).
+
+	# 	:return:
+	# 	"""
+	# 	# centralized orca simulator for all humans
+	# 	if not self.robot.reached_destination():
+	# 	    raise ValueError('Episode is not done yet')
+	# 	params = (10, 10, 5, 5)
+	# 	sim = rvo2.PyRVOSimulator(self.time_step, *params, 0.3, 1)
+	# 	sim.addAgent(self.robot.get_position(), *params, self.robot.radius, self.robot.v_pref,
+	# 	             self.robot.get_velocity())
+	# 	for human in self.humans:
+	# 	    sim.addAgent(human.get_position(), *params, human.radius, human.v_pref, human.get_velocity())
+
+	# 	max_time = 1000
+	# 	while not all(self.human_times):
+	# 	    for i, agent in enumerate([self.robot] + self.humans):
+	# 	        vel_pref = np.array(agent.get_goal_position()) - np.array(agent.get_position())
+	# 	        if norm(vel_pref) > 1:
+	# 	            vel_pref /= norm(vel_pref)
+	# 	        sim.setAgentPrefVelocity(i, tuple(vel_pref))
+	# 	    sim.doStep()
+	# 	    self.global_time += self.time_step
+	# 	    if self.global_time > max_time:
+	# 	        logging.warning('Simulation cannot terminate!')
+	# 	    for i, human in enumerate(self.humans):
+	# 	        if self.human_times[i] == 0 and human.reached_destination():
+	# 	            self.human_times[i] = self.global_time
+
+	# 	    # for visualization
+	# 	    self.robot.set_position(sim.getAgentPosition(0))
+	# 	    for i, human in enumerate(self.humans):
+	# 	        human.set_position(sim.getAgentPosition(i + 1))
+	# 	    self.state = [self.robot.get_full_state(), [human.get_full_state() for human in self.humans]]
+
+	# 	del sim
+	# 	return self.human_times
+	def configure(self, file):
+		"""
+		config is a parser in this case
+		"""
+		config = CrowdSimConfig(file)
+		self.time_limit = config.time_limit
+		self.time_step = config.time_step
+
+		self.randomize_attributes = config.randomize_attributes
+		self.success_reward = config.success_reward
+		self.collision_penalty = config.collision_penalty
+		self.discomfort_dist = config.discomfort_dist
+		self.discomfort_penalty_factor = config.discomfort_penalty_factor
+
+		self.square_width = config.square_width
+		self.circle_radius = config.circle_radius
+		self.human_num = config.human_num
+
+		self.case_capacity = config.case_capacity
+		self.case_size = config.case_size
+
+		self.train_val_sim = config.train_val_sim
+		self.test_sim = config.test_sim
+
+		print('human number: {}'.format(self.human_num))
+		if self.randomize_attributes:
+		    print("Randomize human's radius and preferred speed")
+		else:
+		    print("Not randomize human's radius and preferred speed")
+
+		print('Square width: {}, circle width: {}'.format(self.square_width, self.circle_radius))
 
 	def reset(self, phase='test', test_case=None):
 		"""
@@ -267,6 +363,7 @@ class CrowdSim(gym.Env):
 	        if closest_dist < 0:
 	            collision = True
 	            # logging.debug("Collision: distance between robot and p{} is {:.2E}".format(i, closest_dist))
+	            print ("Collision: distance between robot and p{} is {}".format(i,closest_dist))
 	            break
 	        elif closest_dist < dmin:
 	            dmin = closest_dist
@@ -280,7 +377,7 @@ class CrowdSim(gym.Env):
 	            dist = (dx ** 2 + dy ** 2) ** (1 / 2) - self.humans[i].radius - self.humans[j].radius
 	            if dist < 0:
 	                # detect collision but don't take humans' collision into account
-	                logging.debug('Collision happens between humans in step()')
+	                print('Collision happens between humans in step()')
 
 	    # check if reaching the goal
 	    end_position = np.array(self.robot.compute_position(action, self.time_step))
@@ -343,3 +440,64 @@ class CrowdSim(gym.Env):
 
 	def set_humans(self, humans):
 		self.humans = humans
+
+	def render(self, mode='human'):
+	    humans = self.humans
+	    robots = [self.robot]
+	    self.renderer.add_humans(humans)
+	    self.renderer.add_robots(robots)
+	    self.renderer.render()
+
+	    if mode == 'human':
+	        pass
+	    else:
+	        raise NotImplementedError
+
+
+class Renderer(object):
+    def __init__(self):
+        pass
+
+    def add_humans(self, humans):
+        pass
+
+    def add_robots(self, robots):
+        pass
+
+    def render(self):
+        pass
+
+
+class MatplotRenderer(Renderer):
+    def __init__(self):
+    	print ('MatplotRenderer')
+        self.create_fig()
+
+    def add_humans(self, humans):
+        self.reset_axis()
+        for i, human in enumerate(humans):
+            human_circle = plt.Circle(human.get_position(), human.radius, fill=False, color=self.cmap(i))
+            self.ax.add_artist(human_circle)
+            goal = mlines.Line2D([human.get_goal_position()[0]], [human.get_goal_position()[1]], color=self.cmap(i), marker='*', linestyle='None', markersize=15, label='Goal', fillstyle='none')
+            self.ax.add_artist(goal)
+
+    def add_robots(self, robots):
+        for i, robot in enumerate(robots):
+            robot_circle = plt.Circle(robot.get_position(),robot.radius, fill=True, color='k', fc='orange')
+            self.ax.add_artist(robot_circle)
+            goal = mlines.Line2D([robot.get_goal_position()[0]], [robot.get_goal_position()[1]], color='red', marker='*', linestyle='None',markersize=15, label='Goal')
+            self.ax.add_artist(goal)
+
+    def render(self):
+        plt.pause(.0001)
+
+    def reset_axis(self):
+        self.ax.clear()
+        self.ax.set_xlim(-6, 6)
+        self.ax.set_ylim(-6, 6)
+
+    def create_fig(self):
+        fig, ax = plt.subplots(figsize=(7, 7))
+        self.fig = fig
+        self.ax = ax
+        self.cmap = plt.cm.get_cmap('hsv', 5)

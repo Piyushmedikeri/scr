@@ -161,6 +161,8 @@ class Video(ObservationSubscriber):
         if self.file is not None:
             ffmpeg_writer = animation.writers['ffmpeg']
             writer = ffmpeg_writer(fps=8, metadata=dict(artist='Me'), bitrate=1800)
+            #writer = animation.FFMpegWriter(fps=30, codec='libx264')
+            print (self.file)
             anim.save(self.file, writer=writer)
 
         plt.close(self.fig)
